@@ -1,0 +1,275 @@
+name: Rebuild ARTEMIS Kaguya Moon Map FIXED
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout ARTEMIS
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install map tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pillow rasterio
+
+      - name: Download official USGS JAXA Kaguya GeoTIFF
+        run: |
+          curl -L --fail --retry 5 --retry-delay 5 \
+            -o Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif \
+            "https://planetarymaps.usgs.gov/mosaic/Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif"
+          ls -lh Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif
+
+      - name: Build corrected 16K WebP pyramid
+        shell: bash
+        run: |
+          cat > /tmp/rebuild_artemis_map.py <<'PY'
+          from pathlib import Path
+          import json, math, shutil
+          import numpy as np
+          import rasterio
+          from rasterio.windows import Window
+          from PIL import Image
+
+          SRC = Path("Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif")
+          ROOT = Path("artemis_map")
+          TILES = ROOT / "tiles"
+
+          TILE = 256
+          MAX_Z = 5
+          QUALITY = 84
+          R_MOON = 1737400.0
+
+          # Native source is 23040 x 11520.
+          # z5 is 64 x 32 tiles = 16384 x 8192 px.
+          # Each z5 tile maps EXACTLY to a 360 x 360 source-pixel window.
+          SRC_TILE = 360
+          NX = 64
+          NY = 32
+
+          if ROOT.exists():
+              shutil.rmtree(ROOT)
+          TILES.mkdir(parents=True, exist_ok=True)
+
+          def valid_mask(a, dtype):
+              m = np.isfinite(a)
+              if np.issubdtype(dtype, np.unsignedinteger):
+                  info = np.iinfo(dtype)
+                  # ISIS/PDS 9-16 bit special values occupy extreme codes.
+                  # Exclude low NULL/LRS/LIS and high HIS/HRS codes.
+                  m &= (a > info.min + 2)
+                  m &= (a < info.max - 1)
+              elif np.issubdtype(dtype, np.signedinteger):
+                  info = np.iinfo(dtype)
+                  # Conservative exclusion of extreme signed special codes.
+                  m &= (a > info.min + 4)
+                  m &= (a < info.max - 4)
+              return m
+
+          with rasterio.open(SRC) as src:
+              dtype = np.dtype(src.dtypes[0])
+
+              print("SOURCE SIZE:", src.width, src.height)
+              print("DTYPE:", dtype)
+              print("NODATA:", src.nodata)
+              print("BOUNDS:", src.bounds)
+
+              if src.width != 23040 or src.height != 11520:
+                  raise RuntimeError(
+                      f"Unexpected source dimensions {src.width}x{src.height}"
+                  )
+
+              # Robust global display stretch from nearest-neighbour sample.
+              sample = src.read(
+                  1,
+                  out_shape=(720, 1440),
+                  resampling=rasterio.enums.Resampling.nearest
+              )
+              vm = valid_mask(sample, dtype)
+
+              if src.nodata is not None:
+                  vm &= sample != src.nodata
+
+              vals = sample[vm]
+              if vals.size < 10000:
+                  raise RuntimeError(
+                      f"Too few valid sample pixels after special-pixel mask: {vals.size}"
+                  )
+
+              lo, hi = np.percentile(vals.astype(np.float64), [1.0, 99.0])
+              if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+                  raise RuntimeError(f"Invalid stretch: lo={lo}, hi={hi}")
+
+              print("VALID SAMPLE PIXELS:", vals.size)
+              print("ROBUST STRETCH 1%-99%:", float(lo), float(hi))
+
+              z5 = TILES / "5"
+              z5.mkdir(parents=True, exist_ok=True)
+
+              # Source metadata reports -180..+180 bounds.
+              # Web raster is normalized to 0..360E:
+              # web x 0..31 = source 0..+180 = source x 32..63
+              # web x 32..63 = source -180..0 = source x 0..31.
+              rotate_half = float(src.bounds.left) < -1.0
+
+              for x in range(NX):
+                  xdir = z5 / str(x)
+                  xdir.mkdir(parents=True, exist_ok=True)
+
+                  sx_tile = (x + NX//2) % NX if rotate_half else x
+                  col_off = sx_tile * SRC_TILE
+
+                  for y in range(NY):
+                      row_off = y * SRC_TILE
+
+                      a = src.read(
+                          1,
+                          window=Window(col_off, row_off, SRC_TILE, SRC_TILE)
+                      )
+
+                      vm = valid_mask(a, dtype)
+                      if src.nodata is not None:
+                          vm &= a != src.nodata
+
+                      # Scale ONLY valid science pixels.
+                      out = np.zeros(a.shape, dtype=np.uint8)
+                      if np.any(vm):
+                          v = a[vm].astype(np.float64)
+                          v = (v - lo) * (255.0 / (hi - lo))
+                          v = np.clip(v, 0.0, 255.0)
+                          out[vm] = v.astype(np.uint8)
+
+                      im = Image.fromarray(out, mode="L")
+                      im = im.resize((TILE, TILE), Image.Resampling.LANCZOS)
+                      im.save(
+                          xdir / f"{y}.webp",
+                          "WEBP",
+                          quality=QUALITY,
+                          method=6,
+                          optimize=True,
+                      )
+                      im.close()
+
+          # Build lower zooms strictly from the already-clean child tiles.
+          for z in range(4, -1, -1):
+              nx = 2 ** (z + 1)
+              ny = 2 ** z
+
+              for x in range(nx):
+                  xdir = TILES / str(z) / str(x)
+                  xdir.mkdir(parents=True, exist_ok=True)
+
+                  for y in range(ny):
+                      canvas = Image.new("L", (512, 512), 0)
+
+                      for dx in (0, 1):
+                          for dy in (0, 1):
+                              child = Image.open(
+                                  TILES / str(z + 1) / str(2*x + dx) / f"{2*y + dy}.webp"
+                              ).convert("L")
+                              canvas.paste(child, (dx*TILE, dy*TILE))
+                              child.close()
+
+                      parent = canvas.resize(
+                          (TILE, TILE),
+                          Image.Resampling.LANCZOS
+                      )
+                      parent.save(
+                          xdir / f"{y}.webp",
+                          "WEBP",
+                          quality=QUALITY,
+                          method=6,
+                          optimize=True,
+                      )
+                      parent.close()
+                      canvas.close()
+
+          # Make an easy full-map preview from z0.
+          left = Image.open(TILES / "0" / "0" / "0.webp").convert("L")
+          right = Image.open(TILES / "0" / "1" / "0.webp").convert("L")
+          preview = Image.new("L", (512, 256), 0)
+          preview.paste(left, (0, 0))
+          preview.paste(right, (256, 0))
+          preview.save(ROOT / "preview_full_moon.webp", "WEBP", quality=92, method=6)
+          left.close()
+          right.close()
+          preview.close()
+
+          total = sum(1 for _ in TILES.rglob("*.webp"))
+          if total != 2730:
+              raise RuntimeError(f"Expected 2730 tiles, produced {total}")
+
+          manifest = {
+              "dataset": "SELENE Kaguya TC Global Orthomosaic v02",
+              "source_agencies": "JAXA SELENE/Kaguya; USGS Astrogeology",
+              "source_native_pixels": [23040, 11520],
+              "source_native_resolution_m_per_pixel": 473.80235037734,
+              "web_pixels": [16384, 8192],
+              "web_resolution_m_per_pixel_at_equator":
+                  2 * math.pi * R_MOON / 16384,
+              "projection": "Simple Cylindrical / equirectangular",
+              "latitude_type": "planetocentric",
+              "longitude_direction": "positive east",
+              "web_longitude_domain": [0, 360],
+              "web_latitude_domain": [-90, 90],
+              "dark_omphalos": {"lat_deg": 0.0, "lon_east_deg": 180.0},
+              "tile_format": "WebP grayscale",
+              "tile_size": 256,
+              "zoom_min": 0,
+              "zoom_max": 5,
+              "zoom_0_matrix": [2, 1],
+              "zoom_5_matrix": [64, 32],
+              "total_tiles": total,
+              "webp_quality": QUALITY,
+              "special_pixel_policy":
+                  "ISIS/PDS extreme 16-bit special values excluded before stretch",
+              "display_stretch_percentiles": [1.0, 99.0],
+              "credit": "©JAXA/SELENE; USGS Astrogeology",
+              "metric_note":
+                  "Visual basemap only; ARTEMIS/EA24 metric precision is mathematical."
+          }
+
+          (ROOT / "manifest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          print("TOTAL TILES:", total)
+          print(json.dumps(manifest, ensure_ascii=False, indent=2))
+          PY
+
+          python /tmp/rebuild_artemis_map.py
+
+      - name: Verify corrected map
+        run: |
+          echo "Tile count:"
+          find artemis_map/tiles -type f -name '*.webp' | wc -l
+          echo "Map size:"
+          du -sh artemis_map
+          ls -lh artemis_map/preview_full_moon.webp
+          cat artemis_map/manifest.json
+
+      - name: Commit corrected map
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A artemis_map
+          git commit -m "Rebuild ARTEMIS Kaguya map with corrected 16-bit stretch" || {
+            echo "No changes to commit."
+            exit 0
+          }
+
+          git push origin HEAD:${{ github.ref_name }}
