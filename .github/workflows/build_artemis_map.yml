@@ -1,0 +1,204 @@
+name: Build ARTEMIS Kaguya Moon Map
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout ARTEMIS
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install map tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pillow rasterio
+
+      - name: Download official USGS/JAXA Kaguya map
+        run: |
+          curl -L --fail --retry 5 --retry-delay 5 \
+            -o Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif \
+            "https://planetarymaps.usgs.gov/mosaic/Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif"
+          ls -lh Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif
+
+      - name: Build ARTEMIS 16K WebP tile pyramid
+        shell: bash
+        run: |
+          cat > /tmp/build_artemis_map.py <<'PY'
+          from pathlib import Path
+          import json, math, shutil
+          import numpy as np
+          import rasterio
+          from rasterio.enums import Resampling
+          from PIL import Image
+
+          SRC = Path("Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif")
+          ROOT = Path("artemis_map")
+          TILES = ROOT / "tiles"
+
+          OUT_W = 16384
+          OUT_H = 8192
+          TILE = 256
+          MAX_Z = 5
+          QUALITY = 82
+          R_MOON = 1737400.0
+
+          if ROOT.exists():
+              shutil.rmtree(ROOT)
+          TILES.mkdir(parents=True, exist_ok=True)
+
+          with rasterio.open(SRC) as src:
+              print("SOURCE", src.width, src.height, src.bounds, src.crs)
+
+              sample = src.read(
+                  1,
+                  out_shape=(720, 1440),
+                  masked=True,
+                  resampling=Resampling.bilinear,
+              )
+              vals = sample.compressed()
+              if vals.size == 0:
+                  raise RuntimeError("Kaguya source has no valid pixels")
+
+              lo, hi = np.percentile(vals, [0.5, 99.5])
+              if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+                  lo, hi = float(vals.min()), float(vals.max())
+
+              arr = src.read(
+                  1,
+                  out_shape=(OUT_H, OUT_W),
+                  masked=True,
+                  resampling=Resampling.lanczos,
+              )
+
+              left = float(src.bounds.left)
+              right = float(src.bounds.right)
+
+          data = arr.filled(lo).astype(np.float32, copy=False)
+          del arr
+          data -= lo
+          data *= 255.0 / (hi - lo)
+          np.clip(data, 0.0, 255.0, out=data)
+          data8 = data.astype(np.uint8)
+          del data
+
+          # Normalize visual raster to 0..360°E:
+          # left edge = 0°E, center = 180°E, right edge = 360°E.
+          if left < -1.0 and right <= 181.0:
+              half = OUT_W // 2
+              data8 = np.concatenate((data8[:, half:], data8[:, :half]), axis=1)
+              lon_handling = "-180..+180 source rotated to 0..360"
+          else:
+              lon_handling = "0..360 source retained"
+
+          base = Image.fromarray(data8, mode="L")
+          del data8
+
+          total = 0
+          zoom_info = {}
+
+          for z in range(MAX_Z + 1):
+              w = 512 * (2 ** z)
+              h = 256 * (2 ** z)
+
+              if z == MAX_Z:
+                  level = base
+              else:
+                  level = base.resize((w, h), Image.Resampling.LANCZOS)
+
+              nx = w // TILE
+              ny = h // TILE
+              zoom_info[str(z)] = {"tiles_x": nx, "tiles_y": ny}
+
+              for x in range(nx):
+                  xdir = TILES / str(z) / str(x)
+                  xdir.mkdir(parents=True, exist_ok=True)
+
+                  for y in range(ny):
+                      tile = level.crop(
+                          (x*TILE, y*TILE, (x+1)*TILE, (y+1)*TILE)
+                      )
+                      tile.save(
+                          xdir / f"{y}.webp",
+                          "WEBP",
+                          quality=QUALITY,
+                          method=6,
+                          optimize=True,
+                      )
+                      total += 1
+
+              if z != MAX_Z:
+                  level.close()
+
+          base.close()
+
+          expected = 2730
+          if total != expected:
+              raise RuntimeError(f"Expected {expected} tiles, created {total}")
+
+          manifest = {
+              "dataset": "SELENE Kaguya TC Global Orthomosaic v02",
+              "source_agencies": "JAXA SELENE/Kaguya; USGS Astrogeology",
+              "source_file": "Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif",
+              "source_native_pixels": [23040, 11520],
+              "source_native_resolution_m_per_pixel": 473.80235037734,
+              "web_pixels": [OUT_W, OUT_H],
+              "web_resolution_m_per_pixel_at_equator": 2*math.pi*R_MOON/OUT_W,
+              "projection": "Simple Cylindrical / equirectangular",
+              "latitude": "planetocentric",
+              "longitude": "positive east, 0..360",
+              "dark_omphalos": {"lat_deg": 0.0, "lon_east_deg": 180.0},
+              "tile_format": "WebP grayscale",
+              "tile_size": TILE,
+              "zoom_min": 0,
+              "zoom_max": MAX_Z,
+              "zoom_matrices": zoom_info,
+              "total_tiles": total,
+              "webp_quality": QUALITY,
+              "longitude_normalization": lon_handling,
+              "credit": "JAXA/SELENE Kaguya; USGS Astrogeology",
+              "metric_note": "Basemap is visual only; ARTEMIS/EA24 metric precision is mathematical, not pixel-derived."
+          }
+
+          ROOT.mkdir(exist_ok=True)
+          (ROOT / "manifest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          print(json.dumps(manifest, ensure_ascii=False, indent=2))
+          PY
+
+          python /tmp/build_artemis_map.py
+
+      - name: Verify result
+        run: |
+          echo "Tile count:"
+          find artemis_map/tiles -type f -name '*.webp' | wc -l
+          echo "Map size:"
+          du -sh artemis_map
+          cat artemis_map/manifest.json
+
+      - name: Commit generated lunar map to ARTEMIS
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add artemis_map
+          git commit -m "Add ARTEMIS Kaguya lunar map tiles" || {
+            echo "No changes to commit."
+            exit 0
+          }
+
+          git push origin HEAD:${{ github.ref_name }}
