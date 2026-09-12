@@ -1,7 +1,6 @@
 {
   "dataset": "SELENE Kaguya TC Global Orthomosaic v02",
   "source_agencies": "JAXA SELENE/Kaguya; USGS Astrogeology",
-  "source_file": "Lunar_Kaguya_TC_Ortho_Global_64ppd_v02.tif",
   "source_native_pixels": [
     23040,
     11520
@@ -13,8 +12,16 @@
   ],
   "web_resolution_m_per_pixel_at_equator": 666.2845552181283,
   "projection": "Simple Cylindrical / equirectangular",
-  "latitude": "planetocentric",
-  "longitude": "positive east, 0..360",
+  "latitude_type": "planetocentric",
+  "longitude_direction": "positive east",
+  "web_longitude_domain": [
+    0,
+    360
+  ],
+  "web_latitude_domain": [
+    -90,
+    90
+  ],
   "dark_omphalos": {
     "lat_deg": 0.0,
     "lon_east_deg": 180.0
@@ -23,35 +30,21 @@
   "tile_size": 256,
   "zoom_min": 0,
   "zoom_max": 5,
-  "zoom_matrices": {
-    "0": {
-      "tiles_x": 2,
-      "tiles_y": 1
-    },
-    "1": {
-      "tiles_x": 4,
-      "tiles_y": 2
-    },
-    "2": {
-      "tiles_x": 8,
-      "tiles_y": 4
-    },
-    "3": {
-      "tiles_x": 16,
-      "tiles_y": 8
-    },
-    "4": {
-      "tiles_x": 32,
-      "tiles_y": 16
-    },
-    "5": {
-      "tiles_x": 64,
-      "tiles_y": 32
-    }
-  },
+  "zoom_0_matrix": [
+    2,
+    1
+  ],
+  "zoom_5_matrix": [
+    64,
+    32
+  ],
   "total_tiles": 2730,
-  "webp_quality": 82,
-  "longitude_normalization": "0..360 source retained",
-  "credit": "JAXA/SELENE Kaguya; USGS Astrogeology",
-  "metric_note": "Basemap is visual only; ARTEMIS/EA24 metric precision is mathematical, not pixel-derived."
+  "webp_quality": 84,
+  "special_pixel_policy": "ISIS/PDS extreme 16-bit special values excluded before stretch",
+  "display_stretch_percentiles": [
+    1.0,
+    99.0
+  ],
+  "credit": "©JAXA/SELENE; USGS Astrogeology",
+  "metric_note": "Visual basemap only; ARTEMIS/EA24 metric precision is mathematical."
 }
