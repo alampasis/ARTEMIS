@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>ARTEMIS · EA24 → G</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <style>
+    :root{
+      --panel:#f4f4f2f2;
+      --panel-border:#c9cecf;
+      --text:#25292b;
+      --muted:#70787b;
+      --button:#aab1b3;
+      --button-dark:#8d9699;
+      --accent:#1f6f9d;
+      --omphalos:#ffd21f;
+      --reflector:#55a6d9;
+      --holdout:#9b7bd6;
+    }
+
+    *{box-sizing:border-box}
+
+    html,body{
+      margin:0;
+      width:100%;
+      height:100%;
+      overflow:hidden;
+      background:#090b0d;
+      color:var(--text);
+      font-family:Arial,Helvetica,sans-serif;
+    }
+
+    #map{
+      position:absolute;
+      inset:0;
+      background:#090b0d;
+    }
+
+    .top-help{
+      position:absolute;
+      z-index:700;
+      left:50%;
+      top:10px;
+      transform:translateX(-50%);
+      padding:7px 14px;
+      border-radius:18px;
+      background:#7f8583b8;
+      color:#fff;
+      font-size:13px;
+      letter-spacing:.2px;
+      pointer-events:none;
+      white-space:nowrap;
+    }
+
+    .ea-status{
+      position:absolute;
+      z-index:700;
+      left:10px;
+      top:10px;
+      padding:7px 10px;
+      border-radius:9px;
+      background:#f5f5f2ee;
+      box-shadow:0 2px 9px #0004;
+      font-size:12px;
+      color:#4d5355;
+      pointer-events:none;
+    }
+
+    .slot-control{
+      position:absolute;
+      z-index:710;
+      left:10px;
+      top:50px;
+      display:flex;
+      gap:6px;
+    }
+
+    .slot-control button{
+      width:42px;
+      height:34px;
+      border:1px solid #c6cacc;
+      border-radius:9px;
+      background:#f7f7f5ef;
+      font-weight:700;
+      font-size:14px;
+      cursor:pointer;
+      box-shadow:0 2px 9px #0003;
+    }
+
+    .slot-control button.active{
+      background:#343b3e;
+      color:#fff;
+      border-color:#343b3e;
+    }
+
+    .panel{
+      position:absolute;
+      z-index:750;
+      left:10px;
+      right:10px;
+      bottom:10px;
+      border:1px solid var(--panel-border);
+      border-radius:15px;
+      background:var(--panel);
+      box-shadow:0 6px 26px #0004;
+      padding:12px;
+      backdrop-filter:blur(5px);
+    }
+
+    .panel-title{
+      font-size:17px;
+      font-weight:700;
+      letter-spacing:.4px;
+      margin:0 0 9px 2px;
+    }
+
+    .points{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:9px;
+    }
+
+    .point-card{
+      min-height:108px;
+      border:1px solid #c8cecf;
+      border-radius:11px;
+      background:#fafaf8c9;
+      padding:10px;
+    }
+
+    .point-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:7px;
+    }
+
+    .point-name{
+      font-weight:700;
+      font-size:14px;
+      letter-spacing:.5px;
+    }
+
+    .small-button{
+      border:1px solid #c8cecf;
+      border-radius:9px;
+      background:#f5f6f4;
+      padding:6px 8px;
+      font-size:11px;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .codes{
+      font-family:"Courier New",monospace;
+      font-size:12px;
+      line-height:1.65;
+      color:#555d60;
+      overflow-wrap:anywhere;
+    }
+
+    .point-source{
+      margin-top:4px;
+      font-size:11px;
+      color:#7b8386;
+      min-height:14px;
+    }
+
+    .actions-row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:9px;
+      margin-top:10px;
+    }
+
+    .main-button{
+      border:0;
+      border-radius:10px;
+      padding:11px 12px;
+      background:var(--button);
+      color:#fff;
+      font-weight:700;
+      font-size:13px;
+      cursor:pointer;
+    }
+
+    .main-button:hover{background:var(--button-dark)}
+
+    .clear-button{
+      border:0;
+      border-radius:10px;
+      padding:11px 14px;
+      background:#e6e8e6;
+      color:#32383a;
+      font-weight:700;
+      font-size:12px;
+      cursor:pointer;
+    }
+
+    .result{
+      display:none;
+      margin-top:9px;
+      border-top:1px solid #d1d5d5;
+      padding-top:9px;
+      font-size:13px;
+    }
+
+    .result strong{font-size:15px}
+
+    .converter-button{
+      display:none;
+      width:100%;
+      margin-top:8px;
+      border:0;
+      border-radius:10px;
+      padding:10px;
+      background:#d9dddc;
+      color:#333a3c;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .converter-result{
+      display:none;
+      margin-top:7px;
+      padding:8px 10px;
+      border-radius:9px;
+      background:#ffffffa8;
+      font-size:12px;
+      line-height:1.5;
+    }
+
+    .llr-result{
+      display:none;
+      margin-top:7px;
+      padding:8px 10px;
+      border-left:3px solid #6a9b63;
+      background:#f5faf3;
+      font-size:12px;
+      line-height:1.5;
+    }
+
+    .credit{
+      position:absolute;
+      z-index:720;
+      right:8px;
+      bottom:calc(10px + 275px);
+      padding:4px 7px;
+      border-radius:6px;
+      background:#0c0e0fa8;
+      color:#ddd;
+      font-size:10px;
+      pointer-events:none;
+    }
+
+    .poi-dot{
+      width:18px;
+      height:18px;
+      border-radius:50%;
+      border:2px solid #fff;
+      box-shadow:0 0 0 1px #0008,0 1px 5px #0009;
+    }
+
+    .poi-reflector{background:var(--reflector)}
+    .poi-holdout{background:var(--holdout)}
+
+    .poi-omphalos{
+      width:22px;
+      height:22px;
+      border-radius:50%;
+      background:#e53935;
+      border:3px solid var(--omphalos);
+      box-shadow:0 0 0 2px #b82720,0 1px 7px #000b;
+    }
+
+    .selection-marker{
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      background:#f5f5f3;
+      border:2px solid #25292b;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      font-size:14px;
+      box-shadow:0 2px 8px #0008;
+    }
+
+    .leaflet-popup-content-wrapper{
+      border-radius:10px;
+    }
+
+    .leaflet-popup-content{
+      margin:12px 14px;
+      min-width:245px;
+      font-size:12px;
+      line-height:1.45;
+    }
+
+    .popup-title{
+      font-weight:700;
+      font-size:14px;
+      margin-bottom:5px;
+    }
+
+    .popup-ea{
+      margin-top:7px;
+      font-family:"Courier New",monospace;
+      font-size:11px;
+      overflow-wrap:anywhere;
+    }
+
+    .popup-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:6px;
+      margin-top:9px;
+    }
+
+    .popup-actions button{
+      border:1px solid #bdc4c6;
+      border-radius:7px;
+      background:#f1f2f0;
+      padding:7px 5px;
+      font-weight:700;
+      font-size:10px;
+      cursor:pointer;
+    }
+
+    @media(max-width:700px){
+      .panel{padding:9px}
+      .panel-title{font-size:15px}
+      .points{gap:7px}
+      .point-card{padding:8px;min-height:102px}
+      .codes{font-size:10.7px}
+      .small-button{font-size:10px;padding:5px 6px}
+      .top-help{font-size:11px;max-width:65vw;overflow:hidden;text-overflow:ellipsis}
+      .credit{bottom:calc(10px + 267px)}
+      .leaflet-popup-content{min-width:220px}
+    }
+
+    @media(max-width:480px){
+      .panel{left:6px;right:6px;bottom:6px}
+      .actions-row{grid-template-columns:1fr}
+      .clear-button{padding:9px}
+      .credit{display:none}
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <div class="ea-status" id="eaStatus">EA · z0</div>
+  <div class="top-help">κλικ / ταπ για EA24 · σύρε για μετακίνηση · pinch / wheel για zoom</div>
+
+  <div class="slot-control">
+    <button id="slotA" class="active" type="button">Α</button>
+    <button id="slotB" type="button">Β</button>
+  </div>
+
+  <div class="credit">© JAXA/SELENE · USGS Astrogeology</div>
+
+  <section class="panel">
+    <div class="panel-title">ARTEMIS · EA24 → G</div>
+
+    <div class="points">
+      <div class="point-card">
+        <div class="point-head">
+          <div class="point-name">ΣΤΙΓΜΑ Α</div>
+          <button class="small-button" type="button" id="clearA">ΚΑΘΑΡΙΣΜΟΣ Α</button>
+        </div>
+        <div class="codes" id="codesA">V24=…<br>H24=…</div>
+        <div class="point-source" id="sourceA"></div>
+      </div>
+
+      <div class="point-card">
+        <div class="point-head">
+          <div class="point-name">ΣΤΙΓΜΑ Β</div>
+          <button class="small-button" type="button" id="clearB">ΚΑΘΑΡΙΣΜΟΣ Β</button>
+        </div>
+        <div class="codes" id="codesB">V24=…<br>H24=…</div>
+        <div class="point-source" id="sourceB"></div>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <button class="main-button" type="button" id="distanceButton">ΥΠΟΛΟΓΙΣΜΟΣ ΑΠΟΣΤΑΣΗΣ</button>
+      <button class="clear-button" type="button" id="clearAll">ΚΑΘΑΡΙΣΜΟΣ ΟΛΩΝ</button>
+    </div>
+
+    <div class="result" id="result"></div>
+
+    <button class="converter-button" type="button" id="converterButton">
+      ΜΕΤΑΤΡΟΠΗ ΤΩΝ G ΣΕ ΜΕΤΡΑ
+    </button>
+
+    <div class="converter-result" id="converterResult"></div>
+    <div class="llr-result" id="llrResult"></div>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+  "use strict";
+
+  // ============================================================
+  // 1. Locked lunar constants
+  // ============================================================
+
+  const LEVELS = 24;
+  const MOON_RADIUS_M = 1737400.0;
+  const POLE_TO_POLE_G = 1598.0;
+  const METERS_PER_G = Math.PI * MOON_RADIUS_M / POLE_TO_POLE_G;
+
+  const H_ORIGIN_LON_E = 180.0; // Σκοτεινός Ομφαλός meridian
+  const DARK_OMPHALOS = { lat: 0.0, lon: 180.0 };
+
+  // ============================================================
+  // 2. Exact rational arithmetic with BigInt
+  // ============================================================
+
+  function bgcd(a,b){
+    a = a < 0n ? -a : a;
+    b = b < 0n ? -b : b;
+    while (b !== 0n){
+      const t = a % b;
+      a = b;
+      b = t;
+    }
+    return a || 1n;
+  }
+
+  class F {
+    constructor(n,d=1n){
+      n = BigInt(n);
+      d = BigInt(d);
+      if (d === 0n) throw new Error("Μηδενικός παρονομαστής.");
+      if (d < 0n){ n = -n; d = -d; }
+      const g = bgcd(n,d);
+      this.n = n/g;
+      this.d = d/g;
+    }
+
+    static o(x){
+      return x instanceof F ? x : new F(BigInt(x),1n);
+    }
+
+    static fromDecimal(s){
+      s = String(s).trim();
+      if (/[eE]/.test(s)){
+        s = Number(s).toFixed(12);
+      }
+      let sign = 1n;
+      if (s.startsWith("-")){
+        sign = -1n;
+        s = s.slice(1);
+      } else if (s.startsWith("+")){
+        s = s.slice(1);
+      }
+
+      const parts = s.split(".");
+      const a = parts[0] || "0";
+      const b = parts[1] || "";
+      const den = 10n ** BigInt(b.length);
+      const num = BigInt(a) * den + BigInt(b || "0");
+      return new F(sign*num, den);
+    }
+
+    add(o){ o=F.o(o); return new F(this.n*o.d + o.n*this.d, this.d*o.d); }
+    sub(o){ o=F.o(o); return new F(this.n*o.d - o.n*this.d, this.d*o.d); }
+    mul(o){ o=F.o(o); return new F(this.n*o.n, this.d*o.d); }
+    div(o){ o=F.o(o); return new F(this.n*o.d, this.d*o.n); }
+    neg(){ return new F(-this.n,this.d); }
+    abs(){ return this.n < 0n ? this.neg() : this; }
+
+    cmp(o){
+      o=F.o(o);
+      const x = this.n*o.d - o.n*this.d;
+      return x < 0n ? -1 : x > 0n ? 1 : 0;
+    }
+
+    eq(o){ return this.cmp(o)===0; }
+    lt(o){ return this.cmp(o)<0; }
+    le(o){ return this.cmp(o)<=0; }
+    gt(o){ return this.cmp(o)>0; }
+    ge(o){ return this.cmp(o)>=0; }
+
+    floor(){
+      let q = this.n / this.d;
+      const r = this.n % this.d;
+      if (this.n < 0n && r !== 0n) q -= 1n;
+      return q;
+    }
+
+    mod(o){
+      o=F.o(o);
+      return this.sub(o.mul(new F(this.div(o).floor(),1n)));
+    }
+
+    toNumber(precision=15){
+      const sign = this.n < 0n ? -1 : 1;
+      const an = this.n < 0n ? -this.n : this.n;
+      const q = an / this.d;
+      const r = an % this.d;
+      const scale = 10n ** BigInt(precision);
+      const frac = (r * scale) / this.d;
+      return sign * (Number(q) + Number(frac) / (10 ** precision));
+    }
+  }
+
+  const P800  = new F(800n);
+  const P1260 = new F(1260n);
+  const EQUATOR_V = new F(801n,2n); // 400.5
+
+  const IONIAN_RAW = {
+    "Α":1,"Β":2,"Γ":3,"Δ":4,"Ε":5,"Ζ":7,"Η":8,"Θ":9,
+    "Ι":10,"Κ":20,"Λ":30,"Μ":40,"Ν":50,"Ξ":60,"Ο":70,"Π":80,
+    "Ρ":100,"Σ":200,"Τ":300,"Υ":400,"Φ":500,"Χ":600,"Ψ":700,"Ω":800
+  };
+
+  const NAMES_RAW = {
+    "Α":532,"Β":311,"Γ":85,"Δ":340,"Ε":865,"Ζ":316,"Η":309,"Θ":318,
+    "Ι":1111,"Κ":182,"Λ":76,"Μ":50,"Ν":60,"Ξ":70,"Ο":360,"Π":90,
+    "Ρ":170,"Σ":254,"Τ":701,"Υ":1260,"Φ":510,"Χ":610,"Ψ":710,"Ω":849
+  };
+
+  function mapF(o){
+    const r={};
+    for (const [k,v] of Object.entries(o)) r[k]=new F(BigInt(v));
+    return r;
+  }
+
+  const IONIAN = mapF(IONIAN_RAW);
+  const NAMES = mapF(NAMES_RAW);
+
+  function fmin(a,b){ return a.le(b) ? a : b; }
+  function fmax(a,b){ return a.ge(b) ? a : b; }
+
+  function circularDistanceFraction(a,b,p){
+    const d = a.sub(b).abs().mod(p);
+    const other = p.sub(d);
+    return d.le(other) ? d : other;
+  }
+
+  // ============================================================
+  // 3. Exact EA24 encoder
+  // ============================================================
+
+  function linearZoneFraction(x, anchors){
+    const items = Object.entries(anchors).sort((a,b)=>a[1].cmp(b[1]));
+    const ds = items.map(([,v])=>x.sub(v).abs());
+    const m = ds.reduce((a,b)=>a.le(b)?a:b);
+    const tied = ds.map((d,i)=>d.eq(m)?i:-1).filter(i=>i>=0);
+
+    if (tied.length !== 1) throw new Error("ExactMidpointTie: linear");
+
+    const i = tied[0];
+    const [letter,value] = items[i];
+    const vals = items.map(x=>x[1]);
+    const lo = i===0 ? vals[0] : vals[i-1].add(value).div(2);
+    const hi = i===items.length-1 ? vals.at(-1) : value.add(vals[i+1]).div(2);
+
+    return {letter,value,lo,hi};
+  }
+
+  function circularZoneFraction(phase, anchors, period, rotation){
+    phase = phase.mod(period);
+
+    const pts = Object.entries(anchors)
+      .map(([ch,value])=>({
+        q:value.sub(rotation).mod(period),
+        ch,
+        value
+      }))
+      .sort((a,b)=>a.q.cmp(b.q));
+
+    const ds = pts.map(o=>circularDistanceFraction(phase,o.q,period));
+    const m = ds.reduce((a,b)=>a.le(b)?a:b);
+    const tied = ds.map((d,i)=>d.eq(m)?i:-1).filter(i=>i>=0);
+
+    if (tied.length !== 1) throw new Error("ExactMidpointTie: circular");
+
+    const i = tied[0];
+    const pt = pts[i];
+    const prev = i>0 ? pts[i-1].q : pts.at(-1).q.sub(period);
+    const next = i<pts.length-1 ? pts[i+1].q : pts[0].q.add(period);
+    const lo = prev.add(pt.q).div(2);
+    const hi = pt.q.add(next).div(2);
+
+    let u = phase;
+    while (u.lt(lo)) u = u.add(period);
+    while (u.ge(hi)) u = u.sub(period);
+
+    return {letter:pt.ch,value:pt.value,lo,hi,u};
+  }
+
+  function encodeEACenterExact(vCenter,hCenter){
+    const physical = {...IONIAN, "Υ":EQUATOR_V};
+
+    let z = linearZoneFraction(vCenter,physical);
+    let vCode = z.letter;
+    let phase = P800.mul(z.hi.sub(vCenter)).div(z.hi.sub(z.lo));
+    let rotation = IONIAN[z.letter];
+
+    for (let i=2;i<=LEVELS;i++){
+      z = circularZoneFraction(phase,IONIAN,P800,rotation);
+      vCode += z.letter;
+      phase = P800.mul(z.hi.sub(z.u)).div(z.hi.sub(z.lo));
+      rotation = IONIAN[z.letter];
+    }
+
+    phase = hCenter.mod(P1260);
+    z = circularZoneFraction(phase,NAMES,P1260,new F(0n));
+    let hCode = z.letter;
+    phase = P1260.mul(z.hi.sub(z.u)).div(z.hi.sub(z.lo));
+    rotation = z.value;
+
+    for (let i=2;i<=LEVELS;i++){
+      z = circularZoneFraction(phase,NAMES,P1260,rotation);
+      hCode += z.letter;
+      phase = P1260.mul(z.hi.sub(z.u)).div(z.hi.sub(z.lo));
+      rotation = z.value;
+    }
+
+    return {V24:vCode,H24:hCode};
+  }
+
+  function coordToEA24(latDeg,lonDeg){
+    const lat = F.fromDecimal(Number(latDeg).toFixed(12));
+    const lon = F.fromDecimal(Number(lonDeg).toFixed(12));
+
+    const v = new F(1n)
+      .add(new F(799n).mul(lat.add(90)).div(180));
+
+    const h = P1260
+      .mul(lon.sub(H_ORIGIN_LON_E).mod(new F(360n)))
+      .div(360);
+
+    return encodeEACenterExact(v,h);
+  }
+
+  // ============================================================
+  // 4. Exact EA24 inverse reconstruction
+  // ============================================================
+
+  function mergeIntervals(intervals){
+    const items = intervals.slice().sort((a,b)=>a[0].cmp(b[0]));
+    if (!items.length) return [];
+
+    const out = [[items[0][0],items[0][1]]];
+
+    for (let i=1;i<items.length;i++){
+      const [lo,hi] = items[i];
+      const last = out[out.length-1];
+
+      if (lo.le(last[1])){
+        if (hi.gt(last[1])) last[1]=hi;
+      } else {
+        out.push([lo,hi]);
+      }
+    }
+
+    return out;
+  }
+
+  function linearBounds(letter,anchors){
+    const items = Object.entries(anchors).sort((a,b)=>a[1].cmp(b[1]));
+    const i = items.findIndex(([ch])=>ch===letter);
+    const value = items[i][1];
+    const vals = items.map(x=>x[1]);
+
+    const lo = i===0 ? vals[0] : vals[i-1].add(value).div(2);
+    const hi = i===items.length-1 ? vals.at(-1) : value.add(vals[i+1]).div(2);
+
+    return [lo,hi];
+  }
+
+  function circularBounds(letter,anchors,period,rotation){
+    const pts = Object.entries(anchors)
+      .map(([ch,value])=>({
+        q:value.sub(rotation).mod(period),
+        ch,
+        value
+      }))
+      .sort((a,b)=>a.q.cmp(b.q));
+
+    const i = pts.findIndex(o=>o.ch===letter);
+    const q = pts[i].q;
+    const prev = i>0 ? pts[i-1].q : pts.at(-1).q.sub(period);
+    const next = i<pts.length-1 ? pts[i+1].q : pts[0].q.add(period);
+
+    return [prev.add(q).div(2),q.add(next).div(2)];
+  }
+
+  function rawIntervalsFromUnwrapped(lo,hi,period){
+    const out=[];
+    const k0 = lo.div(period).floor()-2n;
+    const k1 = hi.div(period).floor()+2n;
+
+    for (let k=k0;k<=k1;k++){
+      const kk = new F(k);
+      const a = fmax(new F(0n),lo.sub(period.mul(kk)));
+      const b = fmin(period,hi.sub(period.mul(kk)));
+      if (b.gt(a)) out.push([a,b]);
+    }
+
+    return mergeIntervals(out);
+  }
+
+  function backStep(nextRaw,lo,hi,period){
+    const width = hi.sub(lo);
+    const out=[];
+
+    for (const [a,b] of nextRaw){
+      const pLo = hi.sub(b.div(period).mul(width));
+      const pHi = hi.sub(a.div(period).mul(width));
+      out.push(...rawIntervalsFromUnwrapped(pLo,pHi,period));
+    }
+
+    return mergeIntervals(out);
+  }
+
+  function inverseVerticalCell(code){
+    const physical={...IONIAN,"Υ":EQUATOR_V};
+    const zones=[linearBounds(code[0],physical)];
+
+    for (let i=1;i<code.length;i++){
+      zones.push(
+        circularBounds(code[i],IONIAN,P800,IONIAN[code[i-1]])
+      );
+    }
+
+    let current = rawIntervalsFromUnwrapped(
+      zones.at(-1)[0],zones.at(-1)[1],P800
+    );
+
+    for (let idx=code.length-2;idx>0;idx--){
+      current = backStep(current,zones[idx][0],zones[idx][1],P800);
+    }
+
+    const [lo,hi]=zones[0];
+    const width=hi.sub(lo);
+    const out=[];
+
+    for (const [a,b] of current){
+      const xLo=hi.sub(b.div(P800).mul(width));
+      const xHi=hi.sub(a.div(P800).mul(width));
+      out.push([xLo,xHi]);
+    }
+
+    return mergeIntervals(out);
+  }
+
+  function inverseHorizontalCell(code){
+    const zones=[
+      circularBounds(code[0],NAMES,P1260,new F(0n))
+    ];
+
+    for (let i=1;i<code.length;i++){
+      zones.push(
+        circularBounds(code[i],NAMES,P1260,NAMES[code[i-1]])
+      );
+    }
+
+    let current = rawIntervalsFromUnwrapped(
+      zones.at(-1)[0],zones.at(-1)[1],P1260
+    );
+
+    for (let idx=code.length-2;idx>=0;idx--){
+      current=backStep(current,zones[idx][0],zones[idx][1],P1260);
+    }
+
+    return mergeIntervals(current);
+  }
+
+  function linearCenterAndWidth(intervals){
+    let lo=intervals[0][0], hi=intervals[0][1];
+
+    for (const [a,b] of intervals){
+      lo=fmin(lo,a);
+      hi=fmax(hi,b);
+    }
+
+    return [lo.add(hi).div(2),hi.sub(lo)];
+  }
+
+  function cyclicCenterAndWidth(intervals,period){
+    if (intervals.length===1){
+      const [lo,hi]=intervals[0];
+      return [lo.add(hi).div(2).mod(period),hi.sub(lo)];
+    }
+
+    if (
+      intervals.length===2 &&
+      intervals[0][0].eq(0) &&
+      intervals[1][1].eq(period)
+    ){
+      const a=intervals[0][1];
+      const b=intervals[1][0];
+      const width=a.add(period.sub(b));
+      const center=b.add(width.div(2)).mod(period);
+      return [center,width];
+    }
+
+    const items=mergeIntervals(intervals);
+    const gaps=[];
+
+    for (let i=0;i<items.length-1;i++){
+      gaps.push([items[i+1][0].sub(items[i][1]),i]);
+    }
+
+    gaps.push([
+      items[0][0].add(period).sub(items.at(-1)[1]),
+      items.length-1
+    ]);
+
+    let best=gaps[0];
+
+    for (const g of gaps.slice(1)){
+      const c=g[0].cmp(best[0]);
+      if (c>0 || (c===0 && g[1]<best[1])) best=g;
+    }
+
+    const width=period.sub(best[0]);
+    const start=items[(best[1]+1)%items.length][0];
+    const center=start.add(width.div(2)).mod(period);
+
+    return [center,width];
+  }
+
+  function decodeEA24(vCode,hCode){
+    const [vCenter] = linearCenterAndWidth(inverseVerticalCell(vCode));
+    const [hCenter] = cyclicCenterAndWidth(
+      inverseHorizontalCell(hCode),P1260
+    );
+
+    const lat = vCenter
+      .sub(1)
+      .mul(180)
+      .div(799)
+      .sub(90)
+      .toNumber(13);
+
+    let lon = new F(180)
+      .add(hCenter.div(P1260).mul(360))
+      .toNumber(13);
+
+    lon=((lon%360)+360)%360;
+
+    return {lat,lon};
+  }
+
+  // ============================================================
+  // 5. Lunar metric
+  // ============================================================
+
+  function centralAngleRad(a,b){
+    const p1=a.lat*Math.PI/180;
+    const p2=b.lat*Math.PI/180;
+    const dl=(a.lon-b.lon)*Math.PI/180;
+
+    let dot =
+      Math.sin(p1)*Math.sin(p2) +
+      Math.cos(p1)*Math.cos(p2)*Math.cos(dl);
+
+    dot=Math.max(-1,Math.min(1,dot));
+    return Math.acos(dot);
+  }
+
+  function distanceGFromEA(pointA,pointB){
+    const a=decodeEA24(pointA.V24,pointA.H24);
+    const b=decodeEA24(pointB.V24,pointB.H24);
+    const angle=centralAngleRad(a,b);
+
+    return {
+      distanceG: angle*POLE_TO_POLE_G/Math.PI,
+      decodedA:a,
+      decodedB:b
+    };
+  }
+
+  function xyzFromDirectionRadius(p,r){
+    const lat=p.lat*Math.PI/180;
+    const lon=p.lon*Math.PI/180;
+    const cp=Math.cos(lat);
+
+    return [
+      r*cp*Math.cos(lon),
+      r*cp*Math.sin(lon),
+      r*Math.sin(lat)
+    ];
+  }
+
+  function distance3(a,b){
+    return Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+  }
+
+  // ============================================================
+  // 6. POIs / LLR external witnesses
+  // ============================================================
+
+  const POIS={
+    omphalos:{
+      name:"Σκοτεινός Ομφαλός (ΑΡΤΕΜΙΣ)",
+      lat:0.0,
+      lon:180.0,
+      type:"omphalos"
+    },
+
+    a11:{
+      name:"APOLLO 11 — LLR REFLECTOR",
+      description:"Σταθερός ανακλαστήρας Lunar Laser Ranging.",
+      network:"Μέλος του κύριου τετραπλού δικτύου PASS.",
+      lat:0.6734595,
+      lon:23.4730244,
+      r:1735472.352,
+      type:"primary",
+      use:"Χρησιμοποιείται σε 3 από τις 6 κύριες LLR βάσεις."
+    },
+
+    a14:{
+      name:"APOLLO 14 — LLR REFLECTOR",
+      description:"Σταθερός ανακλαστήρας Lunar Laser Ranging.",
+      network:"Μέλος του κύριου τετραπλού δικτύου PASS.",
+      lat:-3.6441535,
+      lon:342.5213063,
+      r:1736335.734,
+      type:"primary",
+      use:"Χρησιμοποιείται σε 3 από τις 6 κύριες LLR βάσεις."
+    },
+
+    a15:{
+      name:"APOLLO 15 — LLR REFLECTOR",
+      description:"Σταθερός ανακλαστήρας Lunar Laser Ranging.",
+      network:"Μέλος του κύριου τετραπλού δικτύου PASS.",
+      lat:26.1334178,
+      lon:3.6284572,
+      r:1735476.972,
+      type:"primary",
+      use:"Χρησιμοποιείται σε 3 από τις 6 κύριες LLR βάσεις."
+    },
+
+    l2:{
+      name:"LUNOKHOD 2 — LLR REFLECTOR",
+      description:"Σταθερός ανακλαστήρας Lunar Laser Ranging.",
+      network:"Μέλος του κύριου τετραπλού δικτύου PASS.",
+      lat:25.8323282,
+      lon:30.9221056,
+      r:1734638.662,
+      type:"primary",
+      use:"Χρησιμοποιείται σε 3 από τις 6 κύριες LLR βάσεις."
+    },
+
+    l1:{
+      name:"LUNOKHOD 1 — LLR REFLECTOR",
+      description:"Σταθερός ανακλαστήρας Lunar Laser Ranging.",
+      network:"Ανεξάρτητο holdout.",
+      lat:38.3151827,
+      lon:324.9919688,
+      r:1734928.585,
+      type:"holdout",
+      use:"Δεν συμμετέχει στο κύριο τετραπλό calibration set."
+    }
+  };
+
+  for (const poi of Object.values(POIS)){
+    if (poi.type!=="omphalos"){
+      poi.ea=coordToEA24(poi.lat,poi.lon);
+    }
+  }
+
+  const LLR_BASELINES={
+    "a11|a14":{straight:1220241.11,arc:1246873.04},
+    "a11|a15":{straight:951897.19,arc:964252.35},
+    "a14|a15":{straight:1076124.96,arc:1094147.10},
+    "a11|l2": {straight:785439.11,arc:792305.17},
+    "a14|l2": {straight:1611914.13,arc:1676324.18},
+    "a15|l2": {straight:736027.53,arc:741661.12},
+
+    "a11|l1":{straight:1872990.11,arc:1978426.12,holdout:true},
+    "a14|l1":{straight:1328052.89,arc:1362791.64,holdout:true},
+    "a15|l1":{straight:1031517.23,arc:1047343.46,holdout:true},
+    "l1|l2": {straight:1630734.02,arc:1697669.64,holdout:true}
+  };
+
+  function pairKey(a,b){
+    return [a,b].sort().join("|");
+  }
+
+  function llrWitness(keyA,keyB){
+    if (!keyA || !keyB) return null;
+
+    const key=pairKey(keyA,keyB);
+    const target=LLR_BASELINES[key];
+    if (!target) return null;
+
+    const pa=POIS[keyA];
+    const pb=POIS[keyB];
+    if (!pa.r || !pb.r) return null;
+
+    const a=decodeEA24(pa.ea.V24,pa.ea.H24);
+    const b=decodeEA24(pb.ea.V24,pb.ea.H24);
+
+    const xa=xyzFromDirectionRadius(a,pa.r);
+    const xb=xyzFromDirectionRadius(b,pb.r);
+    const straight=distance3(xa,xb);
+
+    const angle=centralAngleRad(a,b);
+    const arc=angle*((pa.r+pb.r)/2);
+
+    const straightError=straight-target.straight;
+    const arcError=arc-target.arc;
+
+    return {
+      holdout:!!target.holdout,
+      straight,
+      arc,
+      straightError,
+      arcError,
+      pass:
+        !target.holdout &&
+        Math.abs(straightError)<=1.0 &&
+        Math.abs(arcError)<=1.0
+    };
+  }
+
+  // ============================================================
+  // 7. Leaflet lunar CRS and map
+  // ============================================================
+
+  const LunarProjection={
+    project:function(latlng){
+      return new L.Point(latlng.lng,latlng.lat);
+    },
+
+    unproject:function(point){
+      return new L.LatLng(point.y,point.x);
+    },
+
+    // The tile pyramid is explicitly 0..360°E, not -180..+180.
+    bounds:L.bounds(
+      L.point(0,-90),
+      L.point(360,90)
+    )
+  };
+
+  const LunarCRS = L.extend({},L.CRS,{
+    projection:LunarProjection,
+
+    // lon 0..360 -> x 0..2 tiles at z0
+    // lat +90..-90 -> y 0..1 tile at z0
+    transformation:new L.Transformation(
+      1/180,0,
+      -1/180,0.5
+    ),
+
+    scale:function(zoom){
+      return 256*Math.pow(2,zoom);
+    },
+
+    zoom:function(scale){
+      return Math.log(scale/256)/Math.LN2;
+    },
+
+    infinite:false
+  });
+
+  const moonBounds=L.latLngBounds(
+    L.latLng(-90,0),
+    L.latLng(90,360)
+  );
+
+  const map=L.map("map",{
+    crs:LunarCRS,
+    minZoom:0,
+    maxZoom:5,
+    zoomControl:true,
+    attributionControl:false,
+    maxBounds:moonBounds,
+    maxBoundsViscosity:1.0,
+    preferCanvas:true
+  });
+
+  L.tileLayer("artemis_map/tiles/{z}/{x}/{y}.webp",{
+    minZoom:0,
+    maxZoom:5,
+    tileSize:256,
+    noWrap:true,
+    bounds:moonBounds,
+    keepBuffer:2
+  }).addTo(map);
+
+  map.fitBounds(moonBounds,{animate:false});
+
+  function makePoiIcon(type){
+    if (type==="omphalos"){
+      return L.divIcon({
+        className:"",
+        html:'<div class="poi-omphalos"></div>',
+        iconSize:[22,22],
+        iconAnchor:[11,11]
+      });
+    }
+
+    const cls=type==="holdout" ? "poi-holdout" : "poi-reflector";
+
+    return L.divIcon({
+      className:"",
+      html:`<div class="poi-dot ${cls}"></div>`,
+      iconSize:[18,18],
+      iconAnchor:[9,9]
+    });
+  }
+
+  function normalizeLon(lon){
+    lon=((lon%360)+360)%360;
+    return lon;
+  }
+
+  function lonText(lon){
+    return `${normalizeLon(lon).toFixed(7)}°E`;
+  }
+
+  function latText(lat){
+    return `${lat.toFixed(7)}°`;
+  }
+
+  window.setPoiPoint=function(slot,key){
+    const poi=POIS[key];
+    if (!poi || !poi.ea) return;
+
+    setPoint(slot,{
+      lat:poi.lat,
+      lon:poi.lon,
+      V24:poi.ea.V24,
+      H24:poi.ea.H24,
+      poiKey:key,
+      source:poi.name
+    });
+
+    map.closePopup();
+  };
+
+  function popupHtml(key,poi){
+    if (poi.type==="omphalos"){
+      return `<div class="popup-title">Σκοτεινός Ομφαλός (ΑΡΤΕΜΙΣ)</div>`;
+    }
+
+    return `
+      <div class="popup-title">${poi.name}</div>
+      <div>${poi.description}</div>
+      <div>${poi.network}</div>
+
+      <div class="popup-ea">
+        <b>Lat:</b> ${poi.ea.V24} (${latText(poi.lat)})<br>
+        <b>Lon:</b> ${poi.ea.H24} (${lonText(poi.lon)})
+      </div>
+
+      <div style="margin-top:6px">${poi.use}</div>
+
+      <div class="popup-actions">
+        <button type="button" onclick="setPoiPoint('A','${key}')">ΘΕΣΕ ΩΣ ΣΤΙΓΜΑ Α</button>
+        <button type="button" onclick="setPoiPoint('B','${key}')">ΘΕΣΕ ΩΣ ΣΤΙΓΜΑ Β</button>
+      </div>
+    `;
+  }
+
+  for (const [key,poi] of Object.entries(POIS)){
+    L.marker([poi.lat,poi.lon],{
+      icon:makePoiIcon(poi.type),
+      keyboard:true,
+      title:poi.name
+    })
+    .addTo(map)
+    .bindPopup(popupHtml(key,poi),{
+      maxWidth:360,
+      closeButton:true
+    });
+  }
+
+  // ============================================================
+  // 8. Point selection UI
+  // ============================================================
+
+  let activeSlot="A";
+  let pointA=null;
+  let pointB=null;
+  let markerA=null;
+  let markerB=null;
+  let lastDistanceG=null;
+
+  function setActiveSlot(slot){
+    activeSlot=slot;
+    document.getElementById("slotA").classList.toggle("active",slot==="A");
+    document.getElementById("slotB").classList.toggle("active",slot==="B");
+  }
+
+  function selectionIcon(slot){
+    return L.divIcon({
+      className:"",
+      html:`<div class="selection-marker">${slot}</div>`,
+      iconSize:[28,28],
+      iconAnchor:[14,14]
+    });
+  }
+
+  function updatePointCard(slot,p){
+    const codes=document.getElementById(`codes${slot}`);
+    const source=document.getElementById(`source${slot}`);
+
+    if (!p){
+      codes.innerHTML="V24=…<br>H24=…";
+      source.textContent="";
+      return;
+    }
+
+    codes.innerHTML=`V24=${p.V24}<br>H24=${p.H24}`;
+    source.textContent=p.source || "";
+  }
+
+  function setPoint(slot,p){
+    if (slot==="A"){
+      pointA=p;
+      if (markerA) map.removeLayer(markerA);
+      markerA=L.marker([p.lat,p.lon],{
+        icon:selectionIcon("Α"),
+        zIndexOffset:1000
+      }).addTo(map);
+      updatePointCard("A",p);
+      setActiveSlot("B");
+    } else {
+      pointB=p;
+      if (markerB) map.removeLayer(markerB);
+      markerB=L.marker([p.lat,p.lon],{
+        icon:selectionIcon("Β"),
+        zIndexOffset:1000
+      }).addTo(map);
+      updatePointCard("B",p);
+      setActiveSlot("A");
+    }
+
+    clearResult();
+  }
+
+  function clearPoint(slot){
+    if (slot==="A"){
+      pointA=null;
+      if (markerA){
+        map.removeLayer(markerA);
+        markerA=null;
+      }
+      updatePointCard("A",null);
+      setActiveSlot("A");
+    } else {
+      pointB=null;
+      if (markerB){
+        map.removeLayer(markerB);
+        markerB=null;
+      }
+      updatePointCard("B",null);
+      setActiveSlot("B");
+    }
+
+    clearResult();
+  }
+
+  function clearResult(){
+    lastDistanceG=null;
+
+    const result=document.getElementById("result");
+    const converterButton=document.getElementById("converterButton");
+    const converterResult=document.getElementById("converterResult");
+    const llrResult=document.getElementById("llrResult");
+
+    result.style.display="none";
+    result.innerHTML="";
+
+    converterButton.style.display="none";
+
+    converterResult.style.display="none";
+    converterResult.innerHTML="";
+
+    llrResult.style.display="none";
+    llrResult.innerHTML="";
+  }
+
+  map.on("click",e=>{
+    try{
+      const lat=Math.max(-90,Math.min(90,e.latlng.lat));
+      const lon=normalizeLon(e.latlng.lng);
+      const ea=coordToEA24(lat,lon);
+
+      setPoint(activeSlot,{
+        lat,
+        lon,
+        V24:ea.V24,
+        H24:ea.H24,
+        poiKey:null,
+        source:`${lat.toFixed(7)}°, ${lon.toFixed(7)}°E`
+      });
+    } catch(err){
+      alert(err.message || String(err));
+    }
+  });
+
+  map.on("zoomend",()=>{
+    document.getElementById("eaStatus").textContent=`EA · z${map.getZoom()}`;
+  });
+
+  document.getElementById("slotA").onclick=()=>setActiveSlot("A");
+  document.getElementById("slotB").onclick=()=>setActiveSlot("B");
+
+  document.getElementById("clearA").onclick=()=>clearPoint("A");
+  document.getElementById("clearB").onclick=()=>clearPoint("B");
+
+  document.getElementById("clearAll").onclick=()=>{
+    clearPoint("A");
+    clearPoint("B");
+    setActiveSlot("A");
+  };
+
+  // ============================================================
+  // 9. G distance + converter + external LLR witness
+  // ============================================================
+
+  const greekNumber=new Intl.NumberFormat("el-GR",{
+    maximumFractionDigits:12
+  });
+
+  function formatM(x){
+    return new Intl.NumberFormat("el-GR",{
+      maximumFractionDigits:6
+    }).format(x);
+  }
+
+  document.getElementById("distanceButton").onclick=()=>{
+    if (!pointA || !pointB){
+      alert("Χρειάζονται ΣΤΙΓΜΑ Α και ΣΤΙΓΜΑ Β.");
+      return;
+    }
+
+    try{
+      const d=distanceGFromEA(pointA,pointB);
+      lastDistanceG=d.distanceG;
+
+      const result=document.getElementById("result");
+      result.innerHTML=
+        `<strong>Απόσταση Α - Β = ${greekNumber.format(d.distanceG)} G</strong><br>` +
+        `<span style="color:#697174">Απόσταση από τον εσωτερικό ARTEMIS G-engine.</span>`;
+
+      result.style.display="block";
+      document.getElementById("converterButton").style.display="block";
+
+      const witness=llrWitness(pointA.poiKey,pointB.poiKey);
+      const llr=document.getElementById("llrResult");
+
+      if (witness){
+        if (witness.holdout){
+          llr.innerHTML=
+            `<b>LLR HOLDOUT</b><br>` +
+            `Straight error: ${formatM(witness.straightError)} m · ` +
+            `Arc error: ${formatM(witness.arcError)} m`;
+        } else {
+          llr.innerHTML=
+            `<b>LLR PASS: ${witness.pass ? "PASS" : "FAIL"}</b><br>` +
+            `Straight error: ${formatM(witness.straightError)} m · ` +
+            `Arc error: ${formatM(witness.arcError)} m`;
+        }
+        llr.style.display="block";
+      } else {
+        llr.style.display="none";
+        llr.innerHTML="";
+      }
+
+    } catch(err){
+      alert(err.message || String(err));
+    }
+  };
+
+  document.getElementById("converterButton").onclick=()=>{
+    if (lastDistanceG===null) return;
+
+    const meters=lastDistanceG*METERS_PER_G;
+    const out=document.getElementById("converterResult");
+
+    out.innerHTML=
+      `1 G = ${greekNumber.format(METERS_PER_G)} m<br>` +
+      `<b>Απόσταση σε μέτρα = ${greekNumber.format(meters)} m</b>`;
+
+    out.style.display="block";
+  };
+
+  </script>
+</body>
+</html>
